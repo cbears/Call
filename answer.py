@@ -3,8 +3,18 @@ import pjsua
 import time
 import os
 
+import scipy
+import scipy.weave
 
-current_call = None
+# Change these values such that they match your installation of pjsua. You
+# probably will need to recompile PJSUA with -fPIC, and you will probably
+# want to grab the correct values form a working C Makefile
+support_code = """ 
+#include <pjlib.h>
+"""
+libraries="""pjsua-x86_64-unknown-linux-gnu pjsip-ua-x86_64-unknown-linux-gnu pjsip-simple-x86_64-unknown-linux-gnu pjsip-x86_64-unknown-linux-gnu pjmedia-codec-x86_64-unknown-linux-gnu pjmedia-x86_64-unknown-linux-gnu pjmedia-audiodev-x86_64-unknown-linux-gnu pjnath-x86_64-unknown-linux-gnu pjlib-util-x86_64-unknown-linux-gnu resample-x86_64-unknown-linux-gnu milenage-x86_64-unknown-linux-gnu srtp-x86_64-unknown-linux-gnu gsmcodec-x86_64-unknown-linux-gnu speex-x86_64-unknown-linux-gnu ilbccodec-x86_64-unknown-linux-gnu g7221codec-x86_64-unknown-linux-gnu portaudio-x86_64-unknown-linux-gnu  pj-x86_64-unknown-linux-gnu m uuid nsl rt pthread  asound crypto ssl""".split()
+library_dirs="""/home/bear/pjproject-1.10/pjlib/lib /home/bear/pjproject-1.10/pjlib-util/lib /home/bear/pjproject-1.10/pjnath/lib /home/bear/pjproject-1.10/pjmedia/lib /home/bear/pjproject-1.10/pjsip/lib /home/bear/pjproject-1.10/third_party/lib""".split()
+
 
 # Logging callback
 def log_cb(level, str, len):
@@ -21,10 +31,16 @@ class answerPhoneCB(pjsua.AccountCallback):
   def on_incoming_call(self, call):
     print "Got a connection from: ", call.info().remote_uri
 
-    current_call = call
-    call_cb = AnswerLoopCB(current_call)
-    current_call.set_callback(call_cb)
-    current_call.answer(200) # Answer call
+    call_cb = AnswerLoopCB( call )
+    call.set_callback(call_cb)
+
+    scipy.weave
+
+    #call.answer(180) # Set intent to answer.
+    #code=""" pj_thread_sleep(1000); """
+    #scipy.weave.inline(code, support_code=support_code, libraries=libraries,
+    #                   library_dirs=library_dirs, extra_link_args=["-fPIC"])
+    call.answer(200) # Answer call
 
 
     
@@ -33,13 +49,14 @@ class AnswerLoopCB(pjsua.CallCallback):
 
   def __init__(self, call=None):
     pjsua.CallCallback.__init__(self, call)
+    self.curcall = call
     self.r=None
     self.r2=None
     self.pj=None
 
   def on_state(self):
-    global current_call
-    print "Call:", self.call.info().remote_uri, self.call.info().state_text, current_call, self.call.info().call_slot
+    print "Call: URI=%s STATE=%s (%d %d)" % ( self.call.info().remote_uri, 
+      self.call.info().state_text, self.curcall )
     
     if self.call.info().state == pjsua.CallState.DISCONNECTED:
       print "Call duration: ", time.time() - self.time
@@ -53,7 +70,6 @@ class AnswerLoopCB(pjsua.CallCallback):
   # Notification when call's media state has changed.
   def on_media_state(self):
     self.time = time.time()
-    self.curcall = current_call
     print "Call started: ", self.time
     pj = pjsua.Lib.instance()
     self.pj = pj
@@ -92,20 +108,15 @@ class AnswerLoopCB(pjsua.CallCallback):
           pj.conf_connect( 0, pj.recorder_get_slot(recorder2))
       except Exception, e:
         print "An error occured.", e
-      print "Finished ACTIVE state", call_slot
+      print "Finished ACTIVE state", self.curcall, call_slot
     else:
-      print "CHANGED STATE: ", self.call.info().media_state, call_slot
+      print "CHANGED STATE: ", self.call.info().media_state, self.curcall, call_slot
 
 
 import pdb
 
 def handler(type, value, tb):
-  global current_call
   #pdb.pm()
-  if current_call:
-    print "Hanging up current call... "
-    current_call.hangup()
-    time.sleep(1)
   lib.destroy()
   sys.exit(1)
 
@@ -125,6 +136,9 @@ mediaConf.channel_count=1
 mediaConf.snd_auto_close_time=900
 
 try:
+  code=""" pj_thread_sleep(1000); """
+  scipy.weave.inline(code, support_code=support_code, libraries=libraries,
+                     library_dirs=library_dirs, extra_link_args=["-fPIC"])
   lib.init(log_cfg = pjsua.LogConfig(level=0, callback=log_cb), media_cfg = mediaConf)
   transport = lib.create_transport(pjsua.TransportType.UDP, pjsua.TransportConfig(0))
   
