@@ -34,12 +34,10 @@ class answerPhoneCB(pjsua.AccountCallback):
     call_cb = AnswerLoopCB( call )
     call.set_callback(call_cb)
 
-    scipy.weave
-
-    #call.answer(180) # Set intent to answer.
-    #code=""" pj_thread_sleep(1000); """
-    #scipy.weave.inline(code, support_code=support_code, libraries=libraries,
-    #                   library_dirs=library_dirs, extra_link_args=["-fPIC"])
+    call.answer(180) # Set intent to answer.
+    code=""" pj_thread_sleep(1000); """
+    scipy.weave.inline(code, support_code=support_code, libraries=libraries,
+                       library_dirs=library_dirs, extra_link_args=["-fPIC"])
     call.answer(200) # Answer call
 
 
@@ -55,7 +53,7 @@ class AnswerLoopCB(pjsua.CallCallback):
     self.pj=None
 
   def on_state(self):
-    print "Call: URI=%s STATE=%s (%d %d)" % ( self.call.info().remote_uri, 
+    print "Call: URI=%s STATE=%s (%s)" % ( self.call.info().remote_uri, 
       self.call.info().state_text, self.curcall )
     
     if self.call.info().state == pjsua.CallState.DISCONNECTED:
@@ -130,10 +128,10 @@ for i in params:
 lib = pjsua.Lib()
 
 mediaConf = pjsua.MediaConfig()
-mediaConf.snd_clock_rate = 44100
-mediaConf.clock_rate = 22050
-mediaConf.channel_count=1
-mediaConf.snd_auto_close_time=900
+#mediaConf.snd_clock_rate = 44100
+#mediaConf.clock_rate = 22050
+#mediaConf.channel_count=1
+#mediaConf.snd_auto_close_time=900
 
 try:
   code=""" pj_thread_sleep(1000); """
