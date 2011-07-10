@@ -35,7 +35,7 @@ class answerPhoneCB(pjsua.AccountCallback):
 
     call_cb = AnswerLoopCB( call )
     call.set_callback(call_cb)
-    call.answer(200) # Answer call
+    call.answer() # Answer call
 
 
 
@@ -82,15 +82,17 @@ pj_caching_pool cp;
 pjmedia_endpt *med_endpt;
 pj_pool_t *pool;
 pjmedia_port *mem_port;
+int port;
+
 
 pj_caching_pool_init(&cp, &pj_pool_factory_default_policy, 0);
 if ( pjmedia_endpt_create(&cp.factory, NULL, 1, &med_endpt) != PJ_SUCCESS )
-  return -1; 
+  return py::object(-1);
 
 pool = pj_pool_create( &cp.factory, "mrec", 4000, 4000, NULL  );
 port = pjmedia_mem_capture_create  (   pool, conversation, 14745600*2, 8000, 1, 80, 16, 0, &mem_port );
 
-return Py::new_reference_to(Py::Int(port))
+return py::object(port);
 """
 
     try: 
