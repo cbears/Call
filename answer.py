@@ -22,6 +22,7 @@ library_dirs="""/home/bear/pjproject-1.10/pjlib/lib /home/bear/pjproject-1.10/pj
 def log_cb(level, str, len):
   print str,
 
+incomming_calls = []
 
 # Callback to receive events from account
 class answerPhoneCB(pjsua.AccountCallback):
@@ -31,15 +32,12 @@ class answerPhoneCB(pjsua.AccountCallback):
 
   # Notification on incoming call
   def on_incoming_call(self, call):
+    global incomming_calls
     print "Got a connection from: ", call.info().remote_uri, call
 
     call_cb = AnswerLoopCB( call )
     call.set_callback(call_cb)
-    call.answer() # Answer call
-
-
-
-
+    incomming_calls.append(call)
     
 # Callback to receive events from Call
 class AnswerLoopCB(pjsua.CallCallback):
@@ -56,8 +54,9 @@ class AnswerLoopCB(pjsua.CallCallback):
       self.call.info().state_text, self.curcall )
     
     if self.call.info().state == pjsua.CallState.DISCONNECTED:
-      print "Call duration: ", time.time() - self.time
-      if self.pj:
+      if hasattr(self, "time"):
+        print "Call duration: ", time.time() - self.time
+      if hasattr(self, "pj") and self.pj:
         self.pj.recorder_destroy(self.r)
         self.pj.recorder_destroy(self.r2)
         self.pj = None
@@ -69,7 +68,7 @@ class AnswerLoopCB(pjsua.CallCallback):
     self.time = time.time()
     print "Call started: ", self.time
     pj = pjsua.Lib.instance()
-    self.pj = pj
+    self.pj = 0
     self.counter=0
     call_slot = self.call.info().conf_slot
 
@@ -118,6 +117,7 @@ return py::object(port);
           (call_slot, self.counter))
         recorder2 = pj.create_recorder("/tmp/conver%d-%d.wav" % 
           (call_slot, self.counter))
+        self.pj=pj
         self.r = recorder
         self.r2 = recorder2
       except Exception, e:
@@ -156,16 +156,14 @@ for i in params:
 lib = pjsua.Lib()
 
 mediaConf = pjsua.MediaConfig()
-#mediaConf.snd_clock_rate = 44100
+mediaConf.snd_clock_rate = 44100
 #mediaConf.clock_rate = 22050
 #mediaConf.channel_count=1
 #mediaConf.snd_auto_close_time=900
-mediaConf.enable_ice=1
+#mediaConf.enable_ice=1
 
 try:
-  code=""" pj_thread_sleep(1000); """
-  scipy.weave.inline(code, support_code=support_code, libraries=libraries,
-                     library_dirs=library_dirs, extra_link_args=["-fPIC"])
+  code=""" pj_thread_sleep(10); """
   lib.init(log_cfg = pjsua.LogConfig(level=0, callback=log_cb), media_cfg = mediaConf)
   transport = lib.create_transport(pjsua.TransportType.UDP, pjsua.TransportConfig(0))
   
@@ -183,7 +181,13 @@ try:
 
   # Menu loop
   while True:
-    time.sleep(1)
+    scipy.weave.inline(code, support_code=support_code, libraries=libraries,
+                     library_dirs=library_dirs, extra_link_args=["-fPIC"])
+    if incomming_calls:
+      call_to_answer=incomming_calls.pop()
+      scipy.weave.inline(code, support_code=support_code, libraries=libraries,
+                         library_dirs=library_dirs, extra_link_args=["-fPIC"])
+      call_to_answer.answer()
     
 
   # Shutdown the library
