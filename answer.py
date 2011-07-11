@@ -23,6 +23,7 @@ def log_cb(level, str, len):
   print str,
 
 incomming_calls = []
+active_calls    = []
 
 # Callback to receive events from account
 class answerPhoneCB(pjsua.AccountCallback):
@@ -56,11 +57,7 @@ class AnswerLoopCB(pjsua.CallCallback):
     if self.call.info().state == pjsua.CallState.DISCONNECTED:
       if hasattr(self, "time"):
         print "Call duration: ", time.time() - self.time
-      if hasattr(self, "pj") and self.pj:
-        self.pj.recorder_destroy(self.r)
-        self.pj.recorder_destroy(self.r2)
-        self.pj = None
-        print "Disconnected", self.call.info().conf_slot
+      print "Disconnected", self.call.info().conf_slot
         
 
   # Notification when call's media state has changed.
@@ -75,6 +72,7 @@ class AnswerLoopCB(pjsua.CallCallback):
     """ Initialize Memory based recorder """
 
     conversation = numpy.zeros ( 14745600, dtype=numpy.uint16 ) # 15m @ 16khz
+    self.conversation = conversation
 
     mcode = """
 pj_caching_pool cp;
@@ -95,7 +93,8 @@ return py::object(port);
 """
 
     try: 
-      scipy.weave.inline(mcode, ['conversation'], support_code=support_code, 
+      self.recorder = scipy.weave.inline(mcode, ['conversation'],
+                       support_code=support_code, 
                        libraries=libraries, library_dirs=library_dirs, 
                        extra_link_args=["-fPIC"] ) 
     except Exception, e:
@@ -111,27 +110,13 @@ return py::object(port);
       except Exception, e:
         print "Error playing greeting", e
 
-      recorder=-1
-      try:
-        recorder = pj.create_recorder("/tmp/conversation%d-%d.wav" % 
-          (call_slot, self.counter))
-        recorder2 = pj.create_recorder("/tmp/conver%d-%d.wav" % 
-          (call_slot, self.counter))
-        self.pj=pj
-        self.r = recorder
-        self.r2 = recorder2
-      except Exception, e:
-        print "Error recording Conversation"
-        
       try: 
         if hello != -1:
           pj.conf_connect( pj.player_get_slot(hello), call_slot )
         pj.conf_connect(call_slot, 0)
         pj.conf_connect(0 , call_slot)
+        pj.conf_connect(call_slot, pj.recorder_get_slot(recorder))
 
-        if recorder != -1:
-          pj.conf_connect( call_slot, pj.recorder_get_slot(recorder))
-          pj.conf_connect( 0, pj.recorder_get_slot(recorder2))
       except Exception, e:
         print "An error occured.", e
       print "Finished ACTIVE state", self.curcall, call_slot
@@ -164,6 +149,7 @@ mediaConf.snd_clock_rate = 44100
 
 try:
   code=""" pj_thread_sleep(10); """
+  cap_size=""" return pjmedia_mem_capture_get_size   ( port ); """   
   lib.init(log_cfg = pjsua.LogConfig(level=0, callback=log_cb), media_cfg = mediaConf)
   transport = lib.create_transport(pjsua.TransportType.UDP, pjsua.TransportConfig(0))
   
@@ -188,6 +174,34 @@ try:
       scipy.weave.inline(code, support_code=support_code, libraries=libraries,
                          library_dirs=library_dirs, extra_link_args=["-fPIC"])
       call_to_answer.answer()
+      active_calls.append(call_to_answer)
+    if active_calls:
+      for i in active_calls:
+        print scipy.weave.inline(cap_size, ['active_calls.recorder'], 
+                 support_code=support_code, libraries=libraries,
+                 library_dirs=library_dirs, extra_link_args=["-fPIC"])
+
+        """
+        8000/512
+        15.62500000000000000000
+        a=15.625
+        697/a
+        44.60800000000000000000
+        770/a
+        49.28000000000000000000
+        852/a
+        54.52800000000000000000
+        941/a
+        60.22400000000000000000
+        1209/a
+        77.37600000000000000000
+        1336/a
+        85.50400000000000000000
+        1477/a
+        94.52800000000000000000
+        1633/a
+        104.51200000000000000000
+        """
     
 
   # Shutdown the library
