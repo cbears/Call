@@ -13,6 +13,8 @@ import numpy
 support_code = """ 
 #include <pjlib.h>
 #include <pjmedia.h>
+#include <pjsua-lib/pjsua.h>
+#include <pjsua-lib/pjsua_internal.h>
 """
 libraries="""pjsua-x86_64-unknown-linux-gnu pjsip-ua-x86_64-unknown-linux-gnu pjsip-simple-x86_64-unknown-linux-gnu pjsip-x86_64-unknown-linux-gnu pjmedia-codec-x86_64-unknown-linux-gnu pjmedia-x86_64-unknown-linux-gnu pjmedia-audiodev-x86_64-unknown-linux-gnu pjnath-x86_64-unknown-linux-gnu pjlib-util-x86_64-unknown-linux-gnu resample-x86_64-unknown-linux-gnu milenage-x86_64-unknown-linux-gnu srtp-x86_64-unknown-linux-gnu gsmcodec-x86_64-unknown-linux-gnu speex-x86_64-unknown-linux-gnu ilbccodec-x86_64-unknown-linux-gnu g7221codec-x86_64-unknown-linux-gnu portaudio-x86_64-unknown-linux-gnu  pj-x86_64-unknown-linux-gnu m uuid nsl rt pthread  asound crypto ssl""".split()
 library_dirs="""/home/bear/pjproject-1.10/pjlib/lib /home/bear/pjproject-1.10/pjlib-util/lib /home/bear/pjproject-1.10/pjnath/lib /home/bear/pjproject-1.10/pjmedia/lib /home/bear/pjproject-1.10/pjsip/lib /home/bear/pjproject-1.10/third_party/lib""".split()
@@ -74,31 +76,55 @@ class AnswerLoopCB(pjsua.CallCallback):
     conversation = numpy.zeros ( 14745600, dtype=numpy.uint16 ) # 15m @ 16khz
     self.conversation = conversation
 
+
     mcode = """
 pj_caching_pool cp;
 pjmedia_endpt *med_endpt;
 pj_pool_t *pool;
 pjmedia_port *mem_port;
-int port;
+pjsua_conf_port_id port;
+
+/*
+create bridge, attach memory device to it. Yes, this means we don't use
+the conference bridge created just for us. 
+
+Cleanup: Delete conference device, delete pool. 
+
+pj_status_t pjmedia_conf_create   (   pool,
+    16, 16000, 1, 160, 16,
+    PJMEDIA_CONF_SMALL_FILTER | PJMEDIA_CONF_NO_MIC ,
+    pjmedia_conf **   p_conf   
+  )   
+
+
+*/
 
 
 pj_caching_pool_init(&cp, &pj_pool_factory_default_policy, 0);
 if ( pjmedia_endpt_create(&cp.factory, NULL, 1, &med_endpt) != PJ_SUCCESS )
   return py::object(-1);
 
-pool = pj_pool_create( &cp.factory, "mrec", 4000, 4000, NULL  );
-port = pjmedia_mem_capture_create  (   pool, conversation, 14745600*2, 8000, 1, 80, 16, 0, &mem_port );
+pool = pj_pool_create( &cp.factory, "mrec", 16384, 16384, NULL  );
+if (pjmedia_mem_capture_create(pool, conversation, 14745600*2, 8000, 1, 80, 16, 0, &mem_port) != PJ_SUCCESS)
+  return py::object(-1);
+
+if (pjsua_conf_add_port( pool, mem_port, &port ) != PJ_SUCCESS )
+  return py::object(-1);
 
 return py::object(port);
 """
 
     try: 
+      poo = pj.auto_lock()
       self.recorder = scipy.weave.inline(mcode, ['conversation'],
                        support_code=support_code, 
                        libraries=libraries, library_dirs=library_dirs, 
                        extra_link_args=["-fPIC"] ) 
+      poo = None
     except Exception, e:
       print "pjmedia_mem_capture_create error", e
+
+    print "recorder:", self.recorder
 
     if self.call.info().media_state == pjsua.MediaState.ACTIVE:
       self.counter+=1
@@ -115,7 +141,7 @@ return py::object(port);
           pj.conf_connect( pj.player_get_slot(hello), call_slot )
         pj.conf_connect(call_slot, 0)
         pj.conf_connect(0 , call_slot)
-        pj.conf_connect(call_slot, pj.recorder_get_slot(recorder))
+        pj.conf_connect(call_slot, self.recorder)
 
       except Exception, e:
         print "An error occured.", e
@@ -147,10 +173,19 @@ mediaConf.snd_clock_rate = 44100
 #mediaConf.snd_auto_close_time=900
 #mediaConf.enable_ice=1
 
-try:
+def pj_sleep():
   code=""" pj_thread_sleep(10); """
-  cap_size=""" return pjmedia_mem_capture_get_size   ( port ); """   
-  lib.init(log_cfg = pjsua.LogConfig(level=0, callback=log_cb), media_cfg = mediaConf)
+  scipy.weave.inline(code, support_code=support_code, libraries=libraries,
+                     library_dirs=library_dirs, extra_link_args=["-fPIC"])
+
+def get_cap_pos( recorder ):
+  code=""" return pjmedia_mem_capture_get_size   ( port ); """   
+  return scipy.weave.inline(code, recorder, support_code=support_code,
+                     libraries=libraries,
+                     library_dirs=library_dirs, extra_link_args=["-fPIC"])
+
+try:
+  lib.init(log_cfg=pjsua.LogConfig(level=0, callback=log_cb), media_cfg=mediaConf)
   transport = lib.create_transport(pjsua.TransportType.UDP, pjsua.TransportConfig(0))
   
   # Start the library
@@ -167,19 +202,50 @@ try:
 
   # Menu loop
   while True:
-    scipy.weave.inline(code, support_code=support_code, libraries=libraries,
-                     library_dirs=library_dirs, extra_link_args=["-fPIC"])
+    pj_sleep()
     if incomming_calls:
       call_to_answer=incomming_calls.pop()
-      scipy.weave.inline(code, support_code=support_code, libraries=libraries,
-                         library_dirs=library_dirs, extra_link_args=["-fPIC"])
+      pj_sleep()
       call_to_answer.answer()
       active_calls.append(call_to_answer)
     if active_calls:
-      for i in active_calls:
-        print scipy.weave.inline(cap_size, ['active_calls.recorder'], 
-                 support_code=support_code, libraries=libraries,
-                 library_dirs=library_dirs, extra_link_args=["-fPIC"])
+      for call in active_calls:
+        pos = get_cap_pos( ['call.recorder'] )
+        last_pos = getattr( call, 'last_pos', 0 )
+        if pos-last_pos < 512:
+          continue
+        if not hasattr( call, 'tones'  ): 
+          call.tones = []
+
+        print "meow:", pos, last_pos
+        last_pos=pos
+
+        fft_vals = call.conversation[pos-512:pos]
+        tone = numpy.fft.fft(fft_vals)
+        call.tones.append(tone)
+
+        freq = []
+
+        freq.append( tone[44] + tone[45] ) 
+        freq.append( tone[49] + tone[50] ) 
+        freq.append( tone[54] + tone[55] )
+        freq.append( tone[60] + tone[61] )
+        freq.append( tone[77] + tone[78] )
+        freq.append( tone[85] + tone[86] )
+        freq.append( tone[94] + tone[95] )
+        freq.append( tone[104] + tone[105] )
+
+        print freq
+
+        # 5, 5, 6, 7, 8, 9, 10
+
+
+        # DO FFT
+        # Look at the tones, do they match? Save the match, otherwise
+        # write -1 in tones. 
+
+        # Check the tones history. Do we have a continuous tone, then 
+        # save it. 
 
         """
         8000/512
