@@ -1,0 +1,25 @@
+This is some broken code showing how to use pjsua and pjlib. It
+may very well be broken or not even compile. 
+
+What is it good for? Edit the python source and you can use it
+to record a greeting. You need to replace the path to hello.wav
+to a real file. Record your greeting as a 22.050 Khz Wav File. 
+
+Earlier revisions show how one might use scipy.weave. 
+
+To compile ealier revisions of this code, you need to compile PJLIB
+on your machine with the -fPIC flag. to do that, set:
+
+export CFLAGS="-fPIC"
+export CPPFLAGS="-fPIC"
+
+Once you have PJLIB compiled, you must set the path to PJLIB before
+executing answer.py. To do that, set the PJPATH variable: 
+
+export PJPATH="/path/to/pjproject"
+
+You must also set the SIPHOST, SIPUSER, & SIPPASS variables.
+
+You can reach me at bear@expression.com where expression should
+be substituted with a term one might use when one encounters a
+bear in your bedroom. Yikes!.

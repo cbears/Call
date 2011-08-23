@@ -1,4 +1,9 @@
 #include <pjsua-lib/pjsua.h>
+#include <pjmedia.h>
+#include <pjlib.h>
+
+
+#define LOG_LEVEL 3
 
 static void answer_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
            pjsip_rx_data *rdata) {
@@ -6,22 +11,51 @@ static void answer_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
   pjsua_call_get_info(call_id, &ci);
   printf("Got a call from %s (%d)\n", ci.remote_info.ptr, call_id);
 
-  pjsua_call_answer(call_id, 200, NULL, NULL);
+  if ( pjsua_call_answer(call_id, 200, NULL, NULL) != PJ_SUCCESS ) 
+    printf("Error answering call correctly\n");
+ 
 }
 
 static void call_state(pjsua_call_id call_id, pjsip_event *e) {
   pjsua_call_info ci;
   pjsua_call_get_info(call_id, &ci);
-  printf("New status, %s (%d)\n", ci.state_text.ptr, call_id);
+
+  if ( ci.state == 4 ) {
+   printf("Re-sending answer call\n");
+   if ( pjsua_call_answer(call_id, 200, NULL, NULL) != PJ_SUCCESS ) 
+     printf("Error answering call correctly\n");
+  }
+
+  printf("New status: %d %s (%d)\n", ci.state, ci.state_text.ptr, call_id);
+  printf("Reason: %s (%d)\n", ci.last_status_text.ptr, call_id);
 }
 
 static void media_change(pjsua_call_id call_id) {
   pjsua_call_info ci;
+  pjsua_call_get_info(call_id, &ci);
+
   if (ci.media_status == PJSUA_CALL_MEDIA_ACTIVE) {
       pjsua_conf_connect(ci.conf_slot, 0);
       pjsua_conf_connect(0, ci.conf_slot);
   }
 }
+
+static void dtmf_callback(pjsua_call_id call_id, int dtmf) {
+  printf("Call ID %d got DTMF %c\n", call_id, dtmf);
+}
+
+static void on_call_tsx_state(pjsua_call_id call_id, 
+  pjsip_transaction *tsx, pjsip_event *e) {
+
+  pjsua_call_info ci;
+  pjsua_call_get_info(call_id, &ci);
+
+  printf("TSX: %d %s (%d)\n", ci.state, ci.state_text.ptr, call_id);
+  printf("TSX: %s (%d)\n", ci.last_status_text.ptr, call_id);
+}
+
+
+
 
 
 
@@ -53,9 +87,12 @@ int main(int argc, char** argv) {
   cfg.cb.on_incoming_call = &answer_call;
   cfg.cb.on_call_media_state = &media_change;
   cfg.cb.on_call_state = &call_state;
+  cfg.cb.on_dtmf_digit = &dtmf_callback;
+  cfg.cb.on_call_tsx_state = &on_call_tsx_state;
+
 
   pjsua_logging_config_default(&log_cfg);
-  log_cfg.console_level = 4;
+  log_cfg.console_level = LOG_LEVEL;
 
   if ( pjsua_init(&cfg, &log_cfg, NULL) != PJ_SUCCESS ) {
     printf("Error initializing pjsua library\n");
@@ -92,6 +129,8 @@ int main(int argc, char** argv) {
     printf("Error connecting to SIP Account. Check Credentials?\n");
     return (9);
   }
+
+
   
   getchar();
 
