@@ -46,7 +46,7 @@ class CallError(Exception):
 HOSTNAME = ""
 
 
-class register():
+class SIPconnection():
   """ 
     This class registers a connection with a SIP provider. 
 
@@ -67,8 +67,13 @@ class register():
     self.un = username
     self.pw = password
     self.gw = gw
+    self.pkt = []
 
     if (!hostname) 
+      """ If a hostname is specified, use it, otherwise try to 
+          get hostname from a global variable.  Still nothing?
+          Try to connect to the internet and see what the iweb
+          thinks our hostname is """
       if (!HOSTNAME)
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('google.com', 0))
@@ -88,28 +93,40 @@ class register():
   def toDict():
     return dict((name, getattr(self, name)) for name in dir(self)) 
 
-  def gen_request(  seq=seqNo(),
+  def add ( self, key, value ): 
+    keys = zip ( *self.pkt )[0]
+    if key in keys:
+      pos = keys.index[key]
+      self.pkt.pop(pos)
+      self.pkt.insert(pos, (key, value))
+    else:
+      self.pkt.append( (key, value) )
+
+
+  def register(  self, seq=seqNo(),
     branch="%s-%d" % (randStr(), seqNo()), hn="10.0.150.8", port=34990,
     tag="%s-%d" % (randStr(), seqNo()), callId="%s-%d" % (randStr(), seqNo())  ):
-    return """REGISTER sip:%(gw)s SIP/2.0
-Via: SIP/2.0/UDP %(hn)s:%(port)s;branch=%(branch)s
-Route: <sip:%(gw)s;lr>
-Max-Forwards: 70
-From: <sip:%(un)s@%(gw)s>;tag=%(tag)s
-To: <sip:%(un)s@%(gw)s>
-Call-ID: %(callId)s
-CSeq: %(seq)s REGISTER
-User-Agent: pysip bear
-Contact: <sip:%(un)s@%(hn)s:%(port)s;ob>
-Expires: 60
-Allow: PRACK, INVITE, ACK, BYE, CANCEL, UPDATE, SUBSCRIBE, NOTIFY, REFER, MESSAGE, OPTIONS
-Content-Length:  0
-""" % self.toDict()
+
+    if self.packet:
+      raise CallError("Packet structure already defined, don't know what to do")
+
+    self.cmd = "REGISTER sip:%s SIP/2.0" % self.gw
+    self.add( "Via", "SIP/2.0/UDP %s:%s;branch=%s" % (hn,port,branch) )
+    self.add( "Route", "<sip:%s;lr>" % self.gw )
+    self.add( "From", "<sip:%s@%s>;tag=%s" % (self.un, self.gw, tag) )
+    self.add( "To", "<sip:%s@%s>" % (self.un, self.gw) )
+    self.add( "Call-ID", "%s" % callId )
+    self.add( "CSeq", "%s REGISTER" % seq ) # RLY? 
+    self.add( "Contact", "<sip:%s@%s:%s;ob>" % (self.un,self.hn,port) )
+
+  def send( self ):
+    self.add( "User-Agent", "pysip bear" )
+    self.add( "Expires", "60" )
+    self.add( "Allow", "PRACK, INVITE, ACK, BYE, CANCEL, UPDATE, SUBSCRIBE, NOTIFY, REFER, MESSAGE, OPTIONS") )
+    self.add( "Max-Forwards", "70" )
+    self.add( "Content-Length", "0" )
 
  
 
 
- 
-
-print gen_request()
 
