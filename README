@@ -1,5 +1,4 @@
-This is some broken code showing how to use pjsua and pjlib. It
-may very well be broken or not even compile. 
+This is some broken code showing how to use pjsua and pjlib.
 
 What is it good for? Edit the python source and you can use it
 to record a greeting. You need to replace the path to hello.wav
