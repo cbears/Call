@@ -1,24 +1,22 @@
-This is some broken code showing how to use pjsua and pjlib.
+This is some broken code showing how to use pjsua and pjlib. 
 
-What is it good for? Edit the python source and you can use it
-to record a greeting. You need to replace the path to hello.wav
-to a real file. Record your greeting as a 22.050 Khz Wav File. 
+I used it to record greetings for my cell phone, though it may have
+other uses? 
 
-Earlier revisions show how one might use scipy.weave. 
+Overall, I feel that SIP is somewhat broken as a protocol, and pj*
+approach towards SIP does nothing to address some of the core problems.
 
-To compile ealier revisions of this code, you need to compile PJLIB
-on your machine with the -fPIC flag. to do that, set:
+As to what the core problems are:
 
-export CFLAGS="-fPIC"
-export CPPFLAGS="-fPIC"
+  * Routability. UDP does not work in many cases, especially when
+    NAT is present. Proxies are not a solution.
+  * Not mobile aware. If your IP/routing changes, your call is dropped.
+    Although even worse, the person your talking to will not be aware
+    that it was dropped until much later.
+  * UDP packet ordering. Bursty networks (4g) wreak havoc on UDP. 
+  * It is better to sacrifice real time voice for something that is 
+    audible. TCP may actually be a better protocol?
 
-Once you have PJLIB compiled, you must set the path to PJLIB before
-executing answer.py. To do that, set the PJPATH variable: 
 
-export PJPATH="/path/to/pjproject"
+Anyway, set the SIPHOST, SIPUSER, & SIPPASS variables to have it do something.
 
-You must also set the SIPHOST, SIPUSER, & SIPPASS variables.
-
-You can reach me at bear@expression.com where expression should
-be substituted with a term one might use when one encounters a
-bear in your bedroom. Yikes!.
